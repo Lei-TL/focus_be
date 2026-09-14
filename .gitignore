@@ -1,0 +1,77 @@
+# ---- Kết quả build ----
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]64/
+*.dll
+*.exe
+*.pdb
+publish/
+artifacts/
+
+# ---- Visual Studio / Rider / VS Code ----
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/extensions.json
+
+# ---- Cấu hình cục bộ và bí mật ----
+# KHÔNG commit chuỗi kết nối, khoá ký JWT, mật khẩu DB.
+# Dùng user secrets (dotnet user-secrets) hoặc biến môi trường ConnectionStrings__FocusDb.
+appsettings.Local.json
+appsettings.*.Local.json
+appsettings.Development.json
+secrets.json
+*.secrets.json
+.env
+.env.*
+!.env.example
+
+# ---- Docker ----
+# Dữ liệu Postgres chạy cục bộ, đừng để lọt vào repo
+.docker-data/
+pgdata/
+docker-compose.override.yml
+
+# ---- Kiểm thử ----
+TestResults/
+[Cc]overage*/
+*.coverage
+*.trx
+
+# ---- NuGet ----
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+!packages/build/
+
+# ---- Log và tệp tạm ----
+*.log
+logs/
+*.tmp
+*.bak
+*.swp
+~$*
+
+# ---- Hệ điều hành ----
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# ---- GHI CHÚ QUAN TRỌNG ----
+# Thư mục Migrations/ PHẢI được commit. Đừng thêm nó vào file này.
+# Migration là một phần của mã nguồn: mất nó thì không dựng lại được
+# lịch sử schema, và mỗi máy sẽ sinh ra một chuỗi migration khác nhau.
