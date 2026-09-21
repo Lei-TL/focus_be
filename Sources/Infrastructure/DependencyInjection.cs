@@ -1,10 +1,12 @@
 using System.Text;
 using Application.UserModule.Abstractions;
+using Application.WorkItemModule.Abstractions;
 using Domain.Entities.UserModule;
 using Infrastructure.Interceptors;
 using Infrastructure.Persistence;
 using Infrastructure.UserModule.Persistence;
 using Infrastructure.UserModule.Security;
+using Infrastructure.WorkItemModule.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -38,6 +40,12 @@ public static class DependencyInjection
         services.AddScoped<ITokenIssuer, JwtTokenIssuer>();
         services.AddSingleton<ISeedGenerator, CryptoSeedGenerator>();
         services.AddSingleton(TimeProvider.System);
+        return services;
+    }
+
+    public static IServiceCollection AddWorkItemInfrastructure(this IServiceCollection services)
+    {
+        services.AddScoped<IWorkItemStore, WorkItemStore>();
         return services;
     }
 }

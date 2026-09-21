@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Domain.Entities;
 using Domain.Entities.UserModule;
+using Domain.Entities.WorkItemModule;
 using System.Text.RegularExpressions;
 
 namespace Infrastructure.Persistence;
@@ -10,6 +11,8 @@ public class FocusDbContext : DbContext
 {
     public DbSet<User> Users => Set<User>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<WorkItem> WorkItems => Set<WorkItem>();
+    public DbSet<WorkItemLink> WorkItemLinks => Set<WorkItemLink>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -1,0 +1,25 @@
+using Application.WorkItemModule.Abstractions;
+using Application.WorkItemModule.Contracts;
+using Domain.Entities.WorkItemModule;
+using Domain.Enums;
+namespace Application.WorkItemModule.Services;
+
+public sealed class WorkItemApplicationService(IWorkItemStore store)
+{
+    public async Task<WorkItemDetail> CreateAsync(CreateWorkItem command, Guid ownerId, CancellationToken ct)
+    {
+        var item = new WorkItem {
+            UserId = ownerId,
+            Title = command.Title.Trim(),
+            Description = string.IsNullOrWhiteSpace(command.Description) ? null : command.Description.Trim(),
+            Type = command.Type,
+            Complexity = command.Complexity,
+            Deadline = command.Deadline?.ToUniversalTime(),
+            Status = WorkItemStatus.Open,
+            UserEstimateMinutes = command.UserEstimateMinutes,
+            ClosedAt = null
+        };
+        await store.AddAsync(item, ct);
+        return WorkItemDetail.From(item);
+    }
+}
