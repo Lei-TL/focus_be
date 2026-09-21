@@ -30,8 +30,10 @@ public sealed class WorkItemStore(FocusDbContext db) : IWorkItemStore
         var item = await db.WorkItems.AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == id && x.UserId == ownerId, ct);
         if (item is null) return (null, []);
+        // Phòng thủ sâu: scope links theo owner qua join, không chỉ dựa vào
+        // giả định M2_06 bảo đảm link cùng owner.
         var dependsOn = await db.WorkItemLinks.AsNoTracking()
-            .Where(x => x.WorkItemId == id)
+            .Where(x => x.WorkItemId == id && x.WorkItem.UserId == ownerId)
             .OrderBy(x => x.DependsOnWorkItemId)
             .Select(x => x.DependsOnWorkItemId).ToListAsync(ct);
         return (item, dependsOn);

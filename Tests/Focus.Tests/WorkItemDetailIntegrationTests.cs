@@ -49,6 +49,14 @@ public sealed class WorkItemDetailIntegrationTests(PostgresFixture fixture) : IC
     }
 
     [Fact]
+    public async Task Detail_of_empty_guid_returns_404()
+    {
+        using var client = await AuthenticatedClientAsync();
+        using var response = await client.GetAsync($"/work-items/{Guid.Empty}");
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Detail_of_other_owner_item_returns_404_without_leak()
     {
         using var first = await AuthenticatedClientAsync();
