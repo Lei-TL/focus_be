@@ -63,4 +63,10 @@ public sealed class WorkItemApplicationService(IWorkItemStore store, TimeProvide
         }, ct);
         return updated is null ? null : WorkItemDetail.From(updated);
     }
+
+    public Task<AddDependencyOutcome> AddDependencyAsync(Guid ownerId, Guid workItemId, Guid dependsOnId, CancellationToken ct) =>
+        // Self-link suy ra trực tiếp từ request, không cần transaction.
+        workItemId == dependsOnId
+            ? Task.FromResult(AddDependencyOutcome.SelfLoop)
+            : store.TryAddDependencyAsync(ownerId, workItemId, dependsOnId, ct);
 }

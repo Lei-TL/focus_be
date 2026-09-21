@@ -1,3 +1,4 @@
+using Application.WorkItemModule.Contracts;
 using Domain.Entities.WorkItemModule;
 using Domain.Enums;
 namespace Application.WorkItemModule.Abstractions;
@@ -11,4 +12,6 @@ public interface IWorkItemStore
     Task<(WorkItem? Item, IReadOnlyList<Guid> DependsOnIds)> FindAsync(Guid ownerId, Guid id, CancellationToken ct);
     // Tải entity tracked của owner, áp thay đổi rồi lưu; null khi không thấy. Không optimistic token ở M2.
     Task<WorkItem?> UpdateAsync(Guid ownerId, Guid id, Action<WorkItem> apply, CancellationToken ct);
+    // Khóa row owner, re-check trong transaction, DFS chu trình rồi insert nguyên tử.
+    Task<AddDependencyOutcome> TryAddDependencyAsync(Guid ownerId, Guid workItemId, Guid dependsOnId, CancellationToken ct);
 }

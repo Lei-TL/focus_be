@@ -1,8 +1,11 @@
 using Application.WorkItemModule.Abstractions;
+using Application.WorkItemModule.Contracts;
+using Application.WorkItemModule.Services;
 using Domain.Entities.WorkItemModule;
 using Domain.Enums;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 namespace Infrastructure.WorkItemModule.Persistence;
 
 public sealed class WorkItemStore(FocusDbContext db) : IWorkItemStore
@@ -46,5 +49,49 @@ public sealed class WorkItemStore(FocusDbContext db) : IWorkItemStore
         apply(item);
         await db.SaveChangesAsync(ct);
         return item;
+    }
+
+    public async Task<AddDependencyOutcome> TryAddDependencyAsync(Guid ownerId, Guid workItemId, Guid dependsOnId, CancellationToken ct)
+    {
+        // Serialize mọi thay đổi graph của cùng owner bằng khóa row users.
+        // Owner khác không chặn nhau; thứ tự khóa cố định nên M2_07/08 dùng
+        // chung cơ chế này không gây deadlock.
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        var owner = await db.Users
+            .FromSql($"SELECT * FROM users WHERE id = {ownerId} FOR UPDATE")
+            .SingleOrDefaultAsync(ct);
+        if (owner is null) return AddDependencyOutcome.ItemNotFound;
+
+        var ownedIds = await db.WorkItems.AsNoTracking()
+            .Where(x => x.UserId == ownerId && (x.Id == workItemId || x.Id == dependsOnId))
+            .Select(x => x.Id).ToListAsync(ct);
+        if (!ownedIds.Contains(workItemId) || !ownedIds.Contains(dependsOnId))
+            return AddDependencyOutcome.ItemNotFound;
+
+        var edges = (await db.WorkItemLinks.AsNoTracking()
+            .Where(x => x.WorkItem.UserId == ownerId)
+            .Select(x => new { x.WorkItemId, x.DependsOnWorkItemId }).ToListAsync(ct))
+            .Select(x => (x.WorkItemId, x.DependsOnWorkItemId)).ToList();
+        // Thêm A→B tạo vòng khi từ B đã tới được A theo chiều phụ thuộc.
+        if (WorkItemGraph.HasPath(edges, dependsOnId, workItemId))
+            return AddDependencyOutcome.Cycle;
+
+        db.WorkItemLinks.Add(new WorkItemLink { WorkItemId = workItemId, DependsOnWorkItemId = dependsOnId });
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException
+            { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            return AddDependencyOutcome.Duplicate;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException
+            { SqlState: PostgresErrorCodes.ForeignKeyViolation })
+        {
+            return AddDependencyOutcome.ItemNotFound;
+        }
+        await tx.CommitAsync(ct);
+        return AddDependencyOutcome.Added;
     }
 }
