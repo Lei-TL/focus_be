@@ -59,6 +59,39 @@ public sealed class WorkItemApplicationTests
     }
 
     [Fact]
+    public async Task Update_replaces_all_fields_but_keeps_owner_status_and_closedAt()
+    {
+        var ownerId = Guid.CreateVersion7();
+        var existing = new WorkItem {
+            Id = Guid.CreateVersion7(), UserId = ownerId, Title = "Old",
+            Status = WorkItemStatus.Done, ClosedAt = DateTimeOffset.UtcNow
+        };
+        store.Tracked = existing;
+
+        var detail = await Service.UpdateAsync(new UpdateWorkItem("  New  ", null,
+            TaskType.Refactor, Complexity.XL, DateTimeOffset.UtcNow.AddDays(-2), null),
+            ownerId, existing.Id, default);
+
+        Assert.NotNull(detail);
+        Assert.Equal("New", detail.Title);
+        Assert.Null(detail.Description);
+        Assert.Equal("Refactor", detail.Type);
+        Assert.Equal("Done", detail.Status);
+        Assert.NotNull(detail.ClosedAt);
+        Assert.Equal(ownerId, existing.UserId);
+        Assert.Equal(existing.Id, store.UpdatedId);
+    }
+
+    [Fact]
+    public async Task Update_missing_item_returns_null()
+    {
+        store.Tracked = null;
+        Assert.Null(await Service.UpdateAsync(new UpdateWorkItem("T", null,
+            TaskType.Coding, Complexity.S, null, null), Guid.CreateVersion7(),
+            Guid.CreateVersion7(), default));
+    }
+
+    [Fact]
     public async Task Get_returns_detail_with_links_or_null()
     {
         var ownerId = Guid.CreateVersion7();
@@ -77,6 +110,8 @@ public sealed class WorkItemApplicationTests
     private sealed class FakeStore : IWorkItemStore
     {
         public WorkItem? Saved;
+        public WorkItem? Tracked;
+        public Guid UpdatedId;
         public (WorkItem? Item, IReadOnlyList<Guid> DependsOn) Found = (null, []);
         public Guid ListedOwner;
         public WorkItemStatus? ListedStatus;
@@ -101,5 +136,12 @@ public sealed class WorkItemApplicationTests
         }
         public Task<(WorkItem? Item, IReadOnlyList<Guid> DependsOnIds)> FindAsync(Guid ownerId, Guid id, CancellationToken ct) =>
             Task.FromResult<(WorkItem?, IReadOnlyList<Guid>)>(Found);
+        public Task<WorkItem?> UpdateAsync(Guid ownerId, Guid id, Action<WorkItem> apply, CancellationToken ct)
+        {
+            if (Tracked is null) return Task.FromResult<WorkItem?>(null);
+            UpdatedId = id;
+            apply(Tracked);
+            return Task.FromResult<WorkItem?>(Tracked);
+        }
     }
 }

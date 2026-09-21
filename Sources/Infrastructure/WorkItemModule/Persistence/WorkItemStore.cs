@@ -38,4 +38,13 @@ public sealed class WorkItemStore(FocusDbContext db) : IWorkItemStore
             .Select(x => x.DependsOnWorkItemId).ToListAsync(ct);
         return (item, dependsOn);
     }
+
+    public async Task<WorkItem?> UpdateAsync(Guid ownerId, Guid id, Action<WorkItem> apply, CancellationToken ct)
+    {
+        var item = await db.WorkItems.SingleOrDefaultAsync(x => x.Id == id && x.UserId == ownerId, ct);
+        if (item is null) return null;
+        apply(item);
+        await db.SaveChangesAsync(ct);
+        return item;
+    }
 }

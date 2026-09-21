@@ -36,4 +36,17 @@ public sealed class WorkItemApplicationService(IWorkItemStore store)
         var (item, dependsOn) = await store.FindAsync(ownerId, id, ct);
         return item is null ? null : WorkItemDetailWithLinks.From(item, dependsOn);
     }
+
+    public async Task<WorkItemDetail?> UpdateAsync(UpdateWorkItem command, Guid ownerId, Guid id, CancellationToken ct)
+    {
+        var updated = await store.UpdateAsync(ownerId, id, item => {
+            item.Title = command.Title.Trim();
+            item.Description = string.IsNullOrWhiteSpace(command.Description) ? null : command.Description.Trim();
+            item.Type = command.Type;
+            item.Complexity = command.Complexity;
+            item.Deadline = command.Deadline?.ToUniversalTime();
+            item.UserEstimateMinutes = command.UserEstimateMinutes;
+        }, ct);
+        return updated is null ? null : WorkItemDetail.From(updated);
+    }
 }
