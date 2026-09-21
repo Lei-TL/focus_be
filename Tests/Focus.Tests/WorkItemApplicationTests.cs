@@ -42,13 +42,45 @@ public sealed class WorkItemApplicationTests
         Assert.Equal(deadline.UtcDateTime, detail.Deadline.Value.UtcDateTime);
     }
 
+    [Fact]
+    public async Task List_maps_items_and_echoes_paging()
+    {
+        var ownerId = Guid.CreateVersion7();
+        var filter = new WorkItemFilter(WorkItemStatus.Open, TaskType.Coding, 2, 20);
+        var result = await Service.ListAsync(filter, ownerId, default);
+
+        Assert.Equal(2, result.Page);
+        Assert.Equal(20, result.PageSize);
+        Assert.Equal(2, result.TotalCount);
+        Assert.Equal(["A", "B"], result.Items.Select(x => x.Title));
+        Assert.Equal(ownerId, store.ListedOwner);
+        Assert.Equal(WorkItemStatus.Open, store.ListedStatus);
+        Assert.Equal(TaskType.Coding, store.ListedType);
+    }
+
     private sealed class FakeStore : IWorkItemStore
     {
         public WorkItem? Saved;
+        public Guid ListedOwner;
+        public WorkItemStatus? ListedStatus;
+        public TaskType? ListedType;
         public Task AddAsync(WorkItem item, CancellationToken ct)
         {
             Saved = item;
             return Task.CompletedTask;
+        }
+        public Task<(IReadOnlyList<WorkItem> Items, int TotalCount)> ListAsync(Guid ownerId,
+            WorkItemStatus? status, TaskType? type, int page, int pageSize, CancellationToken ct)
+        {
+            ListedOwner = ownerId;
+            ListedStatus = status;
+            ListedType = type;
+            IReadOnlyList<WorkItem> items =
+            [
+                new() { Title = "A", UserId = ownerId },
+                new() { Title = "B", UserId = ownerId }
+            ];
+            return Task.FromResult<(IReadOnlyList<WorkItem>, int)>((items, 2));
         }
     }
 }

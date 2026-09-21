@@ -22,4 +22,12 @@ public sealed class WorkItemApplicationService(IWorkItemStore store)
         await store.AddAsync(item, ct);
         return WorkItemDetail.From(item);
     }
+
+    public async Task<PagedResult<WorkItemDetail>> ListAsync(WorkItemFilter filter, Guid ownerId, CancellationToken ct)
+    {
+        var (items, total) = await store.ListAsync(ownerId, filter.Status, filter.Type,
+            filter.Page, filter.PageSize, ct);
+        return new PagedResult<WorkItemDetail>(
+            items.Select(WorkItemDetail.From).ToList(), filter.Page, filter.PageSize, total);
+    }
 }
