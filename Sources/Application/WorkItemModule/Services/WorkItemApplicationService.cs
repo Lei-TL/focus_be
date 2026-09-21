@@ -4,7 +4,7 @@ using Domain.Entities.WorkItemModule;
 using Domain.Enums;
 namespace Application.WorkItemModule.Services;
 
-public sealed class WorkItemApplicationService(IWorkItemStore store)
+public sealed class WorkItemApplicationService(IWorkItemStore store, TimeProvider clock)
 {
     public async Task<WorkItemDetail> CreateAsync(CreateWorkItem command, Guid ownerId, CancellationToken ct)
     {
@@ -46,6 +46,20 @@ public sealed class WorkItemApplicationService(IWorkItemStore store)
             item.Complexity = command.Complexity;
             item.Deadline = command.Deadline?.ToUniversalTime();
             item.UserEstimateMinutes = command.UserEstimateMinutes;
+        }, ct);
+        return updated is null ? null : WorkItemDetail.From(updated);
+    }
+
+    public async Task<WorkItemDetail?> ChangeStatusAsync(ChangeWorkItemStatus command, Guid ownerId, Guid id, CancellationToken ct)
+    {
+        var updated = await store.UpdateAsync(ownerId, id, item => {
+            if (item.Status == command.Status) return;
+            item.Status = command.Status;
+            item.ClosedAt = command.Status switch {
+                WorkItemStatus.Done => clock.GetUtcNow(),
+                WorkItemStatus.Open => null,
+                _ => item.ClosedAt
+            };
         }, ct);
         return updated is null ? null : WorkItemDetail.From(updated);
     }
