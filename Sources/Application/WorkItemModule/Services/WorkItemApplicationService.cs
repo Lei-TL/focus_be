@@ -30,4 +30,10 @@ public sealed class WorkItemApplicationService(IWorkItemStore store)
         return new PagedResult<WorkItemDetail>(
             items.Select(WorkItemDetail.From).ToList(), filter.Page, filter.PageSize, total);
     }
+
+    public async Task<WorkItemDetailWithLinks?> GetAsync(Guid ownerId, Guid id, CancellationToken ct)
+    {
+        var (item, dependsOn) = await store.FindAsync(ownerId, id, ct);
+        return item is null ? null : WorkItemDetailWithLinks.From(item, dependsOn);
+    }
 }

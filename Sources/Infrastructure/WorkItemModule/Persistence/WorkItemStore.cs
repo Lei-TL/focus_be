@@ -24,4 +24,16 @@ public sealed class WorkItemStore(FocusDbContext db) : IWorkItemStore
             .Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
         return (items, total);
     }
+
+    public async Task<(WorkItem? Item, IReadOnlyList<Guid> DependsOnIds)> FindAsync(Guid ownerId, Guid id, CancellationToken ct)
+    {
+        var item = await db.WorkItems.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == id && x.UserId == ownerId, ct);
+        if (item is null) return (null, []);
+        var dependsOn = await db.WorkItemLinks.AsNoTracking()
+            .Where(x => x.WorkItemId == id)
+            .OrderBy(x => x.DependsOnWorkItemId)
+            .Select(x => x.DependsOnWorkItemId).ToListAsync(ct);
+        return (item, dependsOn);
+    }
 }

@@ -58,9 +58,26 @@ public sealed class WorkItemApplicationTests
         Assert.Equal(TaskType.Coding, store.ListedType);
     }
 
+    [Fact]
+    public async Task Get_returns_detail_with_links_or_null()
+    {
+        var ownerId = Guid.CreateVersion7();
+        var item = new WorkItem { Id = Guid.CreateVersion7(), Title = "D", UserId = ownerId };
+        store.Found = (item, [Guid.CreateVersion7(), Guid.CreateVersion7()]);
+
+        var detail = await Service.GetAsync(ownerId, item.Id, default);
+        Assert.NotNull(detail);
+        Assert.Equal("D", detail.Title);
+        Assert.Equal(2, detail.DependsOnWorkItemIds.Count);
+
+        store.Found = (null, []);
+        Assert.Null(await Service.GetAsync(ownerId, Guid.CreateVersion7(), default));
+    }
+
     private sealed class FakeStore : IWorkItemStore
     {
         public WorkItem? Saved;
+        public (WorkItem? Item, IReadOnlyList<Guid> DependsOn) Found = (null, []);
         public Guid ListedOwner;
         public WorkItemStatus? ListedStatus;
         public TaskType? ListedType;
@@ -82,5 +99,7 @@ public sealed class WorkItemApplicationTests
             ];
             return Task.FromResult<(IReadOnlyList<WorkItem>, int)>((items, 2));
         }
+        public Task<(WorkItem? Item, IReadOnlyList<Guid> DependsOnIds)> FindAsync(Guid ownerId, Guid id, CancellationToken ct) =>
+            Task.FromResult<(WorkItem?, IReadOnlyList<Guid>)>(Found);
     }
 }
