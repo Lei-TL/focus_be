@@ -1,0 +1,10 @@
+**/bin
+**/obj
+**/.vs
+**/appsettings.*.Local.json
+**/appsettings.Development.json
+**/secrets.json
+**/*.secrets.json
+**/.env
+**/.env.*
+ServiceWorkers

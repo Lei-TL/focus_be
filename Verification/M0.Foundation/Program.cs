@@ -1,6 +1,6 @@
 using Domain.Entities;
-using Focus_Be.Extensions;
-using Infrastructure.FocusDbContext;
+using Infrastructure;
+using Infrastructure.Persistence;
 using Infrastructure.Interceptors;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
