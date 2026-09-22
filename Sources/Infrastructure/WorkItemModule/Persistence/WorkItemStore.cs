@@ -94,4 +94,26 @@ public sealed class WorkItemStore(FocusDbContext db) : IWorkItemStore
         await tx.CommitAsync(ct);
         return AddDependencyOutcome.Added;
     }
+
+    public async Task<RemoveDependencyOutcome> TryRemoveDependencyAsync(Guid ownerId, Guid workItemId, Guid dependsOnId, CancellationToken ct)
+    {
+        // Cùng thứ tự khóa với add (row users trước) để add/remove đồng thời không deadlock.
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        var owner = await db.Users
+            .FromSql($"SELECT * FROM users WHERE id = {ownerId} FOR UPDATE")
+            .SingleOrDefaultAsync(ct);
+        if (owner is null) return RemoveDependencyOutcome.ItemNotFound;
+
+        var ownedIds = await db.WorkItems.AsNoTracking()
+            .Where(x => x.UserId == ownerId && (x.Id == workItemId || x.Id == dependsOnId))
+            .Select(x => x.Id).ToListAsync(ct);
+        if (!ownedIds.Contains(workItemId) || !ownedIds.Contains(dependsOnId))
+            return RemoveDependencyOutcome.ItemNotFound;
+
+        await db.WorkItemLinks
+            .Where(x => x.WorkItemId == workItemId && x.DependsOnWorkItemId == dependsOnId)
+            .ExecuteDeleteAsync(ct);
+        await tx.CommitAsync(ct);
+        return RemoveDependencyOutcome.Removed;
+    }
 }

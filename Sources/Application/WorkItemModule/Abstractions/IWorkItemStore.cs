@@ -14,4 +14,6 @@ public interface IWorkItemStore
     Task<WorkItem?> UpdateAsync(Guid ownerId, Guid id, Action<WorkItem> apply, CancellationToken ct);
     // Khóa row owner, re-check trong transaction, DFS chu trình rồi insert nguyên tử.
     Task<AddDependencyOutcome> TryAddDependencyAsync(Guid ownerId, Guid workItemId, Guid dependsOnId, CancellationToken ct);
+    // Cùng cơ chế khóa với add; xóa đúng cạnh có hướng, vắng cạnh vẫn thành công (idempotent).
+    Task<RemoveDependencyOutcome> TryRemoveDependencyAsync(Guid ownerId, Guid workItemId, Guid dependsOnId, CancellationToken ct);
 }

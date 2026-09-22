@@ -69,4 +69,7 @@ public sealed class WorkItemApplicationService(IWorkItemStore store, TimeProvide
         workItemId == dependsOnId
             ? Task.FromResult(AddDependencyOutcome.SelfLoop)
             : store.TryAddDependencyAsync(ownerId, workItemId, dependsOnId, ct);
+
+    public Task<RemoveDependencyOutcome> RemoveDependencyAsync(Guid ownerId, Guid workItemId, Guid dependsOnId, CancellationToken ct) =>
+        store.TryRemoveDependencyAsync(ownerId, workItemId, dependsOnId, ct);
 }
