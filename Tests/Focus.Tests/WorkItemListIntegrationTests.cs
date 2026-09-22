@@ -2,6 +2,9 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 namespace Focus.Tests;
 
@@ -72,6 +75,63 @@ public sealed class WorkItemListIntegrationTests(PostgresFixture fixture) : ICla
     }
 
     [Theory]
+    [InlineData("?page=2147483647&pageSize=20")]
+    [InlineData("?page=1073741825&pageSize=4")]
+    public async Task Huge_page_returns_empty_without_overflow(string query)
+    {
+        using var client = await AuthenticatedClientAsync();
+        await CreateAsync(client, "O1", "Coding", "S");
+        await CreateAsync(client, "O2", "Coding", "S");
+
+        using var response = await client.GetAsync("/work-items" + query);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Empty(body.GetProperty("items").EnumerateArray());
+        Assert.Equal(2, body.GetProperty("totalCount").GetInt32());
+    }
+
+    [Fact]
+    public async Task Order_falls_back_to_id_when_timestamps_collide()
+    {
+        using var client = await AuthenticatedClientAsync();
+        var ids = new List<Guid>();
+        for (var i = 1; i <= 5; i++) ids.Add(await CreateIdAsync(client, $"T{i}"));
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FocusDbContext>();
+            var frozen = new DateTimeOffset(2026, 9, 21, 0, 0, 0, TimeSpan.Zero);
+            await db.WorkItems.Where(x => ids.Contains(x.Id))
+                .ExecuteUpdateAsync(s => s.SetProperty(x => x.CreatedAt, frozen));
+        }
+
+        var body = await GetAsync(client, "/work-items?pageSize=20");
+        Assert.Equal(ids.OrderByDescending(x => x).ToList(),
+            body.GetProperty("items").EnumerateArray().Select(x => x.GetProperty("id").GetGuid()).ToList());
+    }
+
+    [Fact]
+    public async Task Filters_and_default_cover_all_statuses()
+    {
+        using var client = await AuthenticatedClientAsync();
+        var open = await CreateIdAsync(client, "StayOpen");
+        var done = await CreateIdAsync(client, "ToDone");
+        var archived = await CreateIdAsync(client, "ToArchived");
+        Assert.Equal(HttpStatusCode.OK,
+            (await client.PatchAsJsonAsync($"/work-items/{done}/status", new { status = "Done" })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK,
+            (await client.PatchAsJsonAsync($"/work-items/{archived}/status", new { status = "Archived" })).StatusCode);
+
+        Assert.Equal(3, (await GetAsync(client, "/work-items")).GetProperty("totalCount").GetInt32());
+        var doneBody = await GetAsync(client, "/work-items?status=Done");
+        Assert.Equal(1, doneBody.GetProperty("totalCount").GetInt32());
+        Assert.Equal(new List<Guid> { done }, doneBody.GetProperty("items").EnumerateArray().Select(x => x.GetProperty("id").GetGuid()));
+        var openBody = await GetAsync(client, "/work-items?status=Open");
+        Assert.Equal(1, openBody.GetProperty("totalCount").GetInt32());
+        Assert.Equal(new List<Guid> { open }, openBody.GetProperty("items").EnumerateArray().Select(x => x.GetProperty("id").GetGuid()));
+    }
+
+    [Theory]
     [InlineData("?status=Bogus")]
     [InlineData("?type=Bogus")]
     [InlineData("?page=0")]
@@ -116,6 +176,14 @@ public sealed class WorkItemListIntegrationTests(PostgresFixture fixture) : ICla
         using var response = await client.PostAsJsonAsync("/work-items",
             new { title, type, complexity });
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    private static async Task<Guid> CreateIdAsync(HttpClient client, string title)
+    {
+        using var response = await client.PostAsJsonAsync("/work-items",
+            new { title, type = "Coding", complexity = "S" });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
     }
 
     private async Task<HttpClient> AuthenticatedClientAsync()

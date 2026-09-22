@@ -9,7 +9,7 @@ namespace Focus.Tests;
 public sealed class WorkItemApplicationTests
 {
     private readonly FakeStore store = new();
-    private WorkItemApplicationService Service => new(store);
+    private WorkItemApplicationService Service => new(store, TimeProvider.System);
 
     [Fact]
     public async Task Create_assigns_owner_trims_and_applies_defaults()
@@ -91,6 +91,120 @@ public sealed class WorkItemApplicationTests
             Guid.CreateVersion7(), default));
     }
 
+    // initial, initialClosedAt, target, expected: "now" | "old" | "null".
+    public static TheoryData<WorkItemStatus, bool, WorkItemStatus, string> StatusMatrix() => new()
+    {
+        { WorkItemStatus.Open, false, WorkItemStatus.Done, "now" },
+        { WorkItemStatus.Archived, false, WorkItemStatus.Done, "now" },
+        { WorkItemStatus.Archived, true, WorkItemStatus.Done, "now" },
+        { WorkItemStatus.Done, true, WorkItemStatus.Done, "old" },
+        { WorkItemStatus.Open, false, WorkItemStatus.Open, "null" },
+        { WorkItemStatus.Open, false, WorkItemStatus.Archived, "null" },
+        { WorkItemStatus.Archived, false, WorkItemStatus.Archived, "null" },
+        { WorkItemStatus.Done, true, WorkItemStatus.Archived, "old" },
+        { WorkItemStatus.Archived, true, WorkItemStatus.Archived, "old" },
+        { WorkItemStatus.Done, true, WorkItemStatus.Open, "null" },
+        { WorkItemStatus.Archived, true, WorkItemStatus.Open, "null" },
+        { WorkItemStatus.Archived, false, WorkItemStatus.Open, "null" }
+    };
+
+    [Theory]
+    [MemberData(nameof(StatusMatrix))]
+    public async Task ChangeStatus_applies_closedAt_matrix_with_injected_clock(
+        WorkItemStatus initial, bool hasClosedAt, WorkItemStatus target, string expected)
+    {
+        var old = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        store.Tracked = new WorkItem {
+            Id = Guid.CreateVersion7(), UserId = Guid.CreateVersion7(), Title = "M",
+            Status = initial, ClosedAt = hasClosedAt ? old : null
+        };
+        var service = new WorkItemApplicationService(store, new FixedClock());
+
+        var detail = await service.ChangeStatusAsync(
+            new ChangeWorkItemStatus(target), store.Tracked.UserId, store.Tracked.Id, default);
+
+        Assert.NotNull(detail);
+        Assert.Equal(target.ToString(), detail.Status);
+        Assert.Equal(expected switch { "now" => FixedClock.Now, "old" => old, _ => (DateTimeOffset?)null },
+            detail.ClosedAt);
+    }
+
+    [Fact]
+    public async Task ChangeStatus_missing_item_returns_null()
+    {
+        store.Tracked = null;
+        Assert.Null(await Service.ChangeStatusAsync(
+            new ChangeWorkItemStatus(WorkItemStatus.Done),
+            Guid.CreateVersion7(), Guid.CreateVersion7(), default));
+    }
+
+    private static readonly Guid N1 = new("11111111-1111-1111-1111-111111111111");
+    private static readonly Guid N2 = new("22222222-2222-2222-2222-222222222222");
+    private static readonly Guid N3 = new("33333333-3333-3333-3333-333333333333");
+    private static readonly Guid N4 = new("44444444-4444-4444-4444-444444444444");
+
+    [Theory]
+    [MemberData(nameof(GraphCases))]
+    public void Graph_detects_paths_without_database(
+        List<(Guid, Guid)> edges, Guid start, Guid target, bool expected) =>
+        Assert.Equal(expected, WorkItemGraph.HasPath(edges, start, target));
+
+    public static TheoryData<List<(Guid, Guid)>, Guid, Guid, bool> GraphCases() => new()
+    {
+        { [], N1, N2, false },
+        { [(N1, N2)], N1, N2, true },
+        { [(N1, N2)], N2, N1, false },
+        { [(N1, N2), (N2, N3)], N1, N3, true },
+        { [(N1, N2), (N2, N3)], N3, N1, false },
+        { [(N1, N2), (N1, N3), (N2, N3)], N1, N3, true },
+        { [(N1, N3), (N2, N3)], N1, N2, false },
+        { [(N1, N2), (N2, N1)], N2, N1, true },
+        { [(N1, N1)], N2, N1, false }
+    };
+
+    [Fact]
+    public async Task AddDependency_short_circuits_self_loop_without_store_call()
+    {
+        var id = Guid.CreateVersion7();
+        Assert.Equal(AddDependencyOutcome.SelfLoop,
+            await Service.AddDependencyAsync(Guid.CreateVersion7(), id, id, default));
+        Assert.False(store.AddDependencyCalled);
+    }
+
+    [Fact]
+    public async Task AddDependency_returns_store_outcome()
+    {
+        store.DependencyOutcome = AddDependencyOutcome.Duplicate;
+        Assert.Equal(AddDependencyOutcome.Duplicate, await Service.AddDependencyAsync(
+            Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7(), default));
+        Assert.True(store.AddDependencyCalled);
+    }
+
+    [Fact]
+    public async Task RemoveDependency_returns_store_outcome()
+    {
+        store.RemoveOutcome = RemoveDependencyOutcome.ItemNotFound;
+        Assert.Equal(RemoveDependencyOutcome.ItemNotFound, await Service.RemoveDependencyAsync(
+            Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7(), default));
+        Assert.True(store.RemoveDependencyCalled);
+    }
+
+    [Fact]
+    public async Task Delete_returns_store_result()
+    {
+        store.Deleted = true;
+        Assert.True(await Service.DeleteAsync(Guid.CreateVersion7(), Guid.CreateVersion7(), default));
+        Assert.True(store.DeleteCalled);
+        store.Deleted = false;
+        Assert.False(await Service.DeleteAsync(Guid.CreateVersion7(), Guid.CreateVersion7(), default));
+    }
+
+    private sealed class FixedClock : TimeProvider
+    {
+        public static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-09-21T00:00:00Z");
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
+
     [Fact]
     public async Task Get_returns_detail_with_links_or_null()
     {
@@ -142,6 +256,27 @@ public sealed class WorkItemApplicationTests
             UpdatedId = id;
             apply(Tracked);
             return Task.FromResult<WorkItem?>(Tracked);
+        }
+        public bool AddDependencyCalled;
+        public AddDependencyOutcome DependencyOutcome = AddDependencyOutcome.Added;
+        public Task<AddDependencyOutcome> TryAddDependencyAsync(Guid ownerId, Guid workItemId, Guid dependsOnId, CancellationToken ct)
+        {
+            AddDependencyCalled = true;
+            return Task.FromResult(DependencyOutcome);
+        }
+        public bool RemoveDependencyCalled;
+        public RemoveDependencyOutcome RemoveOutcome = RemoveDependencyOutcome.Removed;
+        public Task<RemoveDependencyOutcome> TryRemoveDependencyAsync(Guid ownerId, Guid workItemId, Guid dependsOnId, CancellationToken ct)
+        {
+            RemoveDependencyCalled = true;
+            return Task.FromResult(RemoveOutcome);
+        }
+        public bool DeleteCalled;
+        public bool Deleted = true;
+        public Task<bool> TryDeleteAsync(Guid ownerId, Guid id, CancellationToken ct)
+        {
+            DeleteCalled = true;
+            return Task.FromResult(Deleted);
         }
     }
 }

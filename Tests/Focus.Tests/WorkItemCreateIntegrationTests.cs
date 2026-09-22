@@ -40,6 +40,25 @@ public sealed class WorkItemCreateIntegrationTests(PostgresFixture fixture) : IC
     }
 
     [Fact]
+    public async Task Create_with_explicit_null_title_returns_400_and_creates_nothing()
+    {
+        using var client = await AuthenticatedClientAsync();
+        using var response = await client.PostAsJsonAsync("/work-items", new
+        {
+            title = (string?)null,
+            type = "Coding",
+            complexity = "S"
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(body.TryGetProperty("errors", out _));
+
+        using var list = await client.GetAsync("/work-items");
+        var items = await list.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(0, items.GetProperty("totalCount").GetInt32());
+    }
+
+    [Fact]
     public async Task Create_requires_authentication()
     {
         using var client = fixture.Factory.CreateClient();

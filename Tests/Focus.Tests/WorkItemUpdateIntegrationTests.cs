@@ -60,6 +60,26 @@ public sealed class WorkItemUpdateIntegrationTests(PostgresFixture fixture) : IC
         Assert.True(body.GetProperty("deadline").GetDateTimeOffset() < DateTimeOffset.UtcNow);
     }
 
+    [Fact]
+    public async Task Update_with_explicit_null_title_returns_400_and_changes_nothing()
+    {
+        using var client = await AuthenticatedClientAsync();
+        var id = await CreateIdAsync(client, "Kept", "Coding", "S");
+
+        using var response = await client.PutAsJsonAsync($"/work-items/{id}", new
+        {
+            title = (string?)null,
+            type = "Coding",
+            complexity = "S"
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var errors = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(errors.TryGetProperty("errors", out _));
+
+        var body = await GetAsync(client, $"/work-items/{id}");
+        Assert.Equal("Kept", body.GetProperty("title").GetString());
+    }
+
     [Theory]
     [InlineData("""{"type":"Coding","complexity":"S"}""")]
     [InlineData("""{"title":"T","type":"Cooking","complexity":"S"}""")]
