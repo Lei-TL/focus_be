@@ -7,7 +7,7 @@ public sealed class CreateWorkItemValidator : Validator<CreateWorkItemRequest>
 {
     public CreateWorkItemValidator(TimeProvider clock)
     {
-        RuleFor(x => x.Title).NotEmpty().Must(title => title.Trim().Length <= 200)
+        RuleFor(x => x.Title).NotEmpty().Must(title => title is null || title.Trim().Length <= 200)
             .WithMessage("Title must be 1-200 characters after trimming.");
         RuleFor(x => x.Description).MaximumLength(5000);
         RuleFor(x => x.Type).NotEmpty().Must(WorkItemEnums.IsTaskType)

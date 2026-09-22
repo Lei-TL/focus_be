@@ -23,8 +23,13 @@ public sealed class WorkItemStore(FocusDbContext db) : IWorkItemStore
         if (status.HasValue) query = query.Where(x => x.Status == status.Value);
         if (type.HasValue) query = query.Where(x => x.Type == type.Value);
         var total = await query.CountAsync(ct);
+        // Offset tính bằng Int64: page lớn nhân pageSize có thể tràn Int32
+        // (âm → lỗi OFFSET của PostgreSQL, wrap 0 → lặp trang đầu).
+        // Vượt tổng số bản ghi thì trả rỗng trước khi ép về Int32 cho Skip.
+        long offset = (long)(page - 1) * pageSize;
+        if (offset > total) return ([], total);
         var items = await query.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id)
-            .Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
+            .Skip((int)offset).Take(pageSize).ToListAsync(ct);
         return (items, total);
     }
 
