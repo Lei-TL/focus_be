@@ -1,5 +1,6 @@
 using Application.Authentication;
 using Application.UserModule.Services;
+using Application.WorkItemModule.Services;
 using Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,7 +14,9 @@ public static class DependencyInjectionExtensions
     {
         services.AddDatabaseService(configuration);
         services.AddUserInfrastructure(configuration);
+        services.AddWorkItemInfrastructure();
         services.AddScoped<AuthApplicationService>();
+        services.AddScoped<WorkItemApplicationService>();
         services.AddScoped<ICurrentUser, CurrentUser>();
         return services;
     }

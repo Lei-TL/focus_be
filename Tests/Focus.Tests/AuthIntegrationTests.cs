@@ -105,6 +105,6 @@ public sealed class AuthIntegrationTests(PostgresFixture fixture) : IClassFixtur
         await db.Database.MigrateAsync();
         Assert.Equal(profile.Seed, (await db.Users.SingleAsync(x => x.Id == profile.Id)).Seed);
         Assert.False(db.Database.HasPendingModelChanges());
-        Assert.Equal(2, db.Model.GetEntityTypes().Count());
+        Assert.Equal(4, db.Model.GetEntityTypes().Count());
     }
 }
