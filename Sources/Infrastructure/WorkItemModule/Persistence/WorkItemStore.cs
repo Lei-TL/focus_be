@@ -116,4 +116,28 @@ public sealed class WorkItemStore(FocusDbContext db) : IWorkItemStore
         await tx.CommitAsync(ct);
         return RemoveDependencyOutcome.Removed;
     }
+
+    public async Task<bool> TryDeleteAsync(Guid ownerId, Guid id, CancellationToken ct)
+    {
+        // Cùng thứ tự khóa với add/remove link. Một transaction duy nhất nên
+        // lỗi giữa chừng rollback cả links lẫn item, không để link mồ côi
+        // (FK Restrict cũng chặn ghi link trỏ tới item đã mất).
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        var owner = await db.Users
+            .FromSql($"SELECT * FROM users WHERE id = {ownerId} FOR UPDATE")
+            .SingleOrDefaultAsync(ct);
+        if (owner is null) return false;
+
+        var item = await db.WorkItems
+            .SingleOrDefaultAsync(x => x.Id == id && x.UserId == ownerId, ct);
+        if (item is null) return false;
+
+        await db.WorkItemLinks
+            .Where(x => x.WorkItemId == id || x.DependsOnWorkItemId == id)
+            .ExecuteDeleteAsync(ct);
+        db.WorkItems.Remove(item);
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return true;
+    }
 }

@@ -72,4 +72,7 @@ public sealed class WorkItemApplicationService(IWorkItemStore store, TimeProvide
 
     public Task<RemoveDependencyOutcome> RemoveDependencyAsync(Guid ownerId, Guid workItemId, Guid dependsOnId, CancellationToken ct) =>
         store.TryRemoveDependencyAsync(ownerId, workItemId, dependsOnId, ct);
+
+    public Task<bool> DeleteAsync(Guid ownerId, Guid id, CancellationToken ct) =>
+        store.TryDeleteAsync(ownerId, id, ct);
 }

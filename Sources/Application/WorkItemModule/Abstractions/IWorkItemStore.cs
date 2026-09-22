@@ -16,4 +16,6 @@ public interface IWorkItemStore
     Task<AddDependencyOutcome> TryAddDependencyAsync(Guid ownerId, Guid workItemId, Guid dependsOnId, CancellationToken ct);
     // Cùng cơ chế khóa với add; xóa đúng cạnh có hướng, vắng cạnh vẫn thành công (idempotent).
     Task<RemoveDependencyOutcome> TryRemoveDependencyAsync(Guid ownerId, Guid workItemId, Guid dependsOnId, CancellationToken ct);
+    // Hard delete M2: xóa mọi link ở cả hai đầu rồi xóa item trong cùng transaction.
+    Task<bool> TryDeleteAsync(Guid ownerId, Guid id, CancellationToken ct);
 }
